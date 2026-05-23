@@ -1,0 +1,18 @@
+# Build outputs (huge ISO files)
+*.iso
+output/*.iso
+output/
+
+# Trae IDE
+.trae/
+
+# Ventoy
+ventoy-*.zip
+
+# Wget logs
+wget-log*
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
