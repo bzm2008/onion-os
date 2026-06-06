@@ -1,15 +1,17 @@
-# Onion OS 26.0.5 Home Edition
+# Onion OS 26.1.0 Home Edition
 
 > 层层精简，层层用心
 
 Onion OS 是一款基于 Debian 12 (Bookworm) 的定制 Linux 桌面操作系统，专为老旧硬件（2GB+ 内存）和电脑初学者设计。系统自带**离线图形化安装器**，安装后无需命令行操作，所有功能均可通过图形界面完成。
 
-26.0.5 核心改进：
-- **丝滑动画**：Picom glx+vsync 合成器，窗口缩放动画 + dual_kawase 模糊效果
+26.1.0 核心改进：
+- **真·macOS 风格 Dock**：底部 Plank 程序坞，悬停放大 + 弹跳动画，顶部细菜单栏放系统托盘/时钟
+- **美化必达**：所有桌面配置写入 `/etc/skel`，安装后的新用户也能继承主题、壁纸与 Dock（修复历史顽疾）
+- **液态玻璃风格**：半透明深紫主题 + dual_kawase 模糊 + 圆角 + 柔光阴影
+- **稳定的合成器**：Picom 配置改用主线 10.x 兼容写法，杜绝因解析失败而黑屏/无效果
+- **登录自愈**：`onion-apply-appearance` 每次登录强制套用壁纸/主题/Dock，逐显示器适配
+- **智能缩放**：开机自动检测分辨率，适配 DPI / 顶栏高度 / Dock 图标 / 字体大小
 - **WiFi 即连**：全系无线固件 + iwd 后端 + rfkill 自解锁
-- **智能缩放**：开机自动检测分辨率，适配 DPI/面板/字体大小
-- **极简桌面**：纯底部面板（4插件），无多余图标，紫色品牌化主题
-- **深度品牌化**：Plymouth 启动动画 + 多款壁纸 + 紫色强调色调
 
 ---
 
@@ -18,10 +20,10 @@ Onion OS 是一款基于 Debian 12 (Bookworm) 的定制 Linux 桌面操作系统
 | 项目 | 说明 |
 |------|------|
 | 名称 | Onion OS |
-| 版本 | 26.0.5 Home Edition |
+| 版本 | 26.1.0 Home Edition |
 | 底层系统 | Debian 12 (Bookworm) Stable |
-| 桌面环境 | Xfce 4.18 |
-| 窗口合成器 | Picom (glx + vsync + blur) |
+| 桌面环境 | Xfce 4.18 + Plank Dock |
+| 窗口合成器 | Picom (glx + dual_kawase blur + 圆角) |
 | 显示管理器 | LightDM（自动登录） |
 | 系统语言 | 简体中文 (zh_CN.UTF-8) |
 | 网络管理 | NetworkManager + iwd |
@@ -32,13 +34,13 @@ Onion OS 是一款基于 Debian 12 (Bookworm) 的定制 Linux 桌面操作系统
 
 ```
 ┌─────────────────────────────────────────────┐
-│             Onion OS 26.0.5                  │
+│             Onion OS 26.1.0                  │
 ├─────────────────────────────────────────────┤
 │  Garlic Claw (AI)  │  应用商店 (Flatpak)    │
 ├─────────────────────────────────────────────┤
 │  WPS Office │ 微信 │ Firefox ESR │ Fcitx5   │
 ├─────────────────────────────────────────────┤
-│  Xfce 4.18 + Picom (glx+vsync) + 紫色主题   │
+│  Xfce 4.18 + Plank Dock + Picom 液态玻璃    │
 ├─────────────────────────────────────────────┤
 │  LightDM + Plymouth │ NM + iwd │ 自动缩放   │
 ├─────────────────────────────────────────────┤
@@ -92,7 +94,7 @@ chmod +x build_onion_os.sh modules/*.sh
 sudo ./build_onion_os.sh
 ```
 
-构建完成后，ISO 镜像文件位于 `output/onion-os-26.0.3-home-amd64.iso`。
+构建完成后，ISO 镜像文件位于 `output/onion-os-26.1.0-home-amd64.iso`。
 
 ### 构建流程
 
@@ -102,10 +104,12 @@ build_onion_os.sh
   ├── 2. debootstrap 构建 base 系统
   ├── 3. chroot 环境执行模块脚本
   │   ├── 01_base.sh            → APT源/内核/语言/用户/网络/系统标识
-  │   ├── 02_apps.sh            → Xfce/LightDM/WPS/微信/Firefox/Fcitx5/应用商店
-  │   ├── 03_desktop.sh         → 主题/壁纸/面板/Compton/右键菜单/自启动
+  │   ├── 02_apps.sh            → Xfce/Plank/LightDM/WPS/微信/Firefox/Fcitx5/应用商店
+  │   ├── 03_desktop.sh         → 主题/壁纸/顶栏/Plank Dock/Picom/右键菜单/自启动
   │   ├── 04_garlic_claw.sh     → Node.js/OpenClaw/Gateway/防火墙/配置向导
-  │   └── 05_security_tools.sh  → Onion安全管家/安全扫描工具/QQ Linux版
+  │   ├── 05_security_tools.sh  → Onion安全管家/安全扫描工具/QQ Linux版
+  │   ├── 06_ota_update.sh      → OTA 更新客户端/systemd 定时器/GUI 更新工具
+  │   └── 07_finalize.sh        → 配置固化到 /etc/skel（确保安装后美化生效）
   ├── 4. 生成 initramfs
   ├── 5. 清理 chroot
   └── 6. 打包 ISO 镜像
@@ -117,7 +121,7 @@ build_onion_os.sh
 
 1. 使用 Rufus（Windows）或 dd（Linux）将 ISO 写入 U 盘：
    ```bash
-   sudo dd if=onion-os-26.0.3-home-amd64.iso of=/dev/sdX bs=4M status=progress
+   sudo dd if=onion-os-26.1.0-home-amd64.iso of=/dev/sdX bs=4M status=progress
    ```
 2. 将 U 盘插入目标电脑，从 U 盘启动
 3. 系统启动后会**自动全屏弹出图形化安装程序 (Calamares)**。
@@ -128,33 +132,38 @@ build_onion_os.sh
 1. 在 VirtualBox / VMware 中创建新虚拟机
 2. 分配 2GB+ 内存、20GB+ 磁盘
 3. 挂载 ISO 镜像启动
-4. 在启动向导中选择 "Install Onion OS 26.0.5" 进行一键安装。<｜end▁of▁thinking｜>### 桌面布局 (26.0.5 极简版)
+4. 在启动向导中选择 "Install Onion OS 26.1.0" 进行一键安装。
+
+### 桌面布局 (26.1.0 macOS 风格)
 
 ```
 ┌──────────────────────────────────────────────┐
+│ 🧅 Onion OS                          🔊 📶 🕐 │  ← 顶部细菜单栏 (玻璃)
+├──────────────────────────────────────────────┤
 │                                              │
 │          桌面壁纸 (Onion OS 紫色渐变)          │
 │                                              │
-│         📁文件  🌐浏览器  🧄AI助手           │
 │                                              │
-├──────────────────────────────────────────────┤
-│ 🧅 Onion OS │    任务列表 (居中)     │🔊🕐│
+│      ╭────────────────────────────────╮      │
+│      │ 🌐 📁 🛒 💬 🧄 ⟳ ⚙   (悬停放大) │      │  ← 底部 Plank Dock
+│      ╰────────────────────────────────╯      │
 └──────────────────────────────────────────────┘
-  ↑                                    ↑
- 开始菜单                            系统托盘
 ```
+
+- 顶栏左侧 Onion 开始菜单，右侧网络/音量/电池/时钟
+- 底部 Plank Dock 居中排列常用应用，鼠标悬停时图标放大 1.5x
 
 ### 智能缩放 (HiDPI)
 
-系统首次登录时自动检测屏幕分辨率并调整界面大小：
+系统首次登录时自动检测屏幕分辨率并调整界面大小（顶栏高度 + Dock 图标 + 字体）：
 
-| 分辨率 | DPI | 面板高度 | 光标大小 | 字体大小 |
-|--------|-----|---------|---------|---------|
-| 4K+ (≥3840) | 192 | 48px | 36 | 14 |
-| 2K (≥2560) | 144 | 44px | 32 | 12 |
-| 1080p (≥1920) | 96 | 38px | 24 | 11 |
-| 768p-1080p | 96 | 34px | 22 | 10 |
-| <768p | 96 | 30px | 20 | 9 |
+| 分辨率 | DPI | 顶栏高度 | Dock 图标 | 光标大小 | 字体大小 |
+|--------|-----|---------|----------|---------|---------|
+| 4K+ (≥3840) | 192 | 36px | 64px | 36 | 14 |
+| 2K (≥2560) | 144 | 32px | 56px | 30 | 12 |
+| 1080p (≥1920) | 96 | 30px | 48px | 24 | 11 |
+| 768p-1080p | 96 | 26-28px | 40-44px | 22 | 10 |
+| <768p | 96 | 24px | 30-34px | 18 | 9 |
 
 可通过 `onion-scale` 命令手动重新缩放。
 

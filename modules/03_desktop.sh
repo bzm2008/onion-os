@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Onion OS 模块 03: 桌面定制与美化 (26.0.6 macOS Dock 重构版)
+# Onion OS 模块 03: 桌面定制与美化 (26.1.0 macOS Dock + 玻璃风重构版)
 # ============================================================================
 # 设计意图：
 #   将 Xfce 深度定制为 Onion OS 独特风格 —— 丝滑动画、简洁面板、
 #   自动 HiDPI 缩放、品牌化视觉、开箱即用的完整体验。
 #
-# 核心改进 (vs 26.0.4)：
-#   1. Picom glx+vsync+dual_kawase 模糊 → 丝滑动画
-#   2. 自动分辨率检测 → 自适应 DPI/面板/字体缩放
-#   3. 极简面板 (仅4个插件) → 干净桌面
-#   4. Onion 品牌化主题 (紫色系)
-#   5. 多分辨率壁纸生成
+# 核心改进 (vs 26.0.6)：
+#   1. 真·macOS Dock：底部 Plank 程序坞（悬停放大），顶部细菜单栏放托盘/时钟
+#   2. 美化必达：配置同步进 /etc/skel，安装后的新用户也继承（见 07_finalize.sh）
+#   3. Picom 改用主线 10.x 兼容写法，杜绝因解析失败导致美化无效
+#   4. 登录自愈 onion-apply-appearance：逐显示器强制套用壁纸/主题/Dock
+#   5. 自动分辨率检测 → 自适应 DPI/顶栏/Dock 图标/字体缩放
+#   6. Onion 品牌化液态玻璃主题 (紫色系) + 多分辨率壁纸生成
 # ============================================================================
 
 set -uo pipefail
@@ -53,43 +54,39 @@ else
 fi
 
 # DPI策略：像素密度 / 屏幕物理尺寸估算
-# 笔记本通常 13-15寸 1366-1920宽 → DPI相近但面板字体需更紧凑
+# PANEL_SIZE = 顶部菜单栏高度；DOCK_ICON = Plank 底部 Dock 图标尺寸
 if [[ "${WIDTH}" -ge 5120 ]]; then
-    DPI=240;   PANEL_SIZE=52; CURSOR_SIZE=44; FONT_SIZE=16
+    DPI=240;   PANEL_SIZE=40; DOCK_ICON=72; CURSOR_SIZE=44; FONT_SIZE=16
 elif [[ "${WIDTH}" -ge 3840 ]]; then
-    DPI=192;   PANEL_SIZE=48; CURSOR_SIZE=36; FONT_SIZE=14
+    DPI=192;   PANEL_SIZE=36; DOCK_ICON=64; CURSOR_SIZE=36; FONT_SIZE=14
 elif [[ "${WIDTH}" -ge 2560 ]]; then
-    DPI=144;   PANEL_SIZE=42; CURSOR_SIZE=30; FONT_SIZE=12
+    DPI=144;   PANEL_SIZE=32; DOCK_ICON=56; CURSOR_SIZE=30; FONT_SIZE=12
 elif [[ "${WIDTH}" -ge 1920 ]]; then
-    DPI=96;    PANEL_SIZE=38; CURSOR_SIZE=24; FONT_SIZE=11
+    DPI=96;    PANEL_SIZE=30; DOCK_ICON=48; CURSOR_SIZE=24; FONT_SIZE=11
 elif [[ "${WIDTH}" -ge 1680 ]]; then
-    DPI=96;    PANEL_SIZE=36; CURSOR_SIZE=22; FONT_SIZE=11
+    DPI=96;    PANEL_SIZE=28; DOCK_ICON=44; CURSOR_SIZE=22; FONT_SIZE=11
 elif [[ "${WIDTH}" -ge 1440 ]]; then
-    DPI=96;    PANEL_SIZE=34; CURSOR_SIZE=22; FONT_SIZE=10
+    DPI=96;    PANEL_SIZE=28; DOCK_ICON=42; CURSOR_SIZE=22; FONT_SIZE=10
 elif [[ "${WIDTH}" -ge 1366 ]]; then
-    DPI=96;    PANEL_SIZE=32; CURSOR_SIZE=22; FONT_SIZE=10
+    DPI=96;    PANEL_SIZE=26; DOCK_ICON=40; CURSOR_SIZE=22; FONT_SIZE=10
 elif [[ "${WIDTH}" -ge 1280 ]]; then
-    DPI=96;    PANEL_SIZE=30; CURSOR_SIZE=20; FONT_SIZE=10
+    DPI=96;    PANEL_SIZE=26; DOCK_ICON=38; CURSOR_SIZE=20; FONT_SIZE=10
 elif [[ "${WIDTH}" -ge 1024 ]]; then
-    DPI=96;    PANEL_SIZE=28; CURSOR_SIZE=18; FONT_SIZE=9
+    DPI=96;    PANEL_SIZE=24; DOCK_ICON=34; CURSOR_SIZE=18; FONT_SIZE=9
 else
-    DPI=96;    PANEL_SIZE=26; CURSOR_SIZE=18; FONT_SIZE=9
+    DPI=96;    PANEL_SIZE=24; DOCK_ICON=30; CURSOR_SIZE=18; FONT_SIZE=9
 fi
 
-# 纵向模式修正（如平板旋转）
-if [[ "${ASPECT}" < "1.0" ]]; then
-    PANEL_SIZE=$((PANEL_SIZE + 4))
+# 纵向模式修正（如平板旋转）— 用 awk 做数值比较，避免字符串字典序误判
+if awk "BEGIN {exit !(${ASPECT} < 1.0)}"; then
+    PANEL_SIZE=$((PANEL_SIZE + 2))
     FONT_SIZE=$((FONT_SIZE + 1))
 fi
 
-# 超宽屏修正（21:9, 32:9）— 面板稍小以留更多内容空间
-if awk "BEGIN {exit !(${ASPECT} > 2.3)}"; then
-    PANEL_SIZE=$((PANEL_SIZE - 2))
-fi
-
-# 矮屏幕修正（小于 800px 高度）— 紧缩面板
+# 矮屏幕修正（小于 800px 高度）— 紧缩面板与 Dock
 if [[ "${HEIGHT}" -lt 800 ]]; then
-    PANEL_SIZE=$((PANEL_SIZE > 26 ? PANEL_SIZE - 4 : 22))
+    PANEL_SIZE=$((PANEL_SIZE > 24 ? PANEL_SIZE - 2 : 22))
+    DOCK_ICON=$((DOCK_ICON > 32 ? DOCK_ICON - 6 : 30))
     FONT_SIZE=$((FONT_SIZE > 9 ? FONT_SIZE - 1 : 9))
 fi
 
@@ -98,6 +95,16 @@ xfconf-query -c xsettings -p /Xft/DPI -s "${DPI}" 2>/dev/null || true
 xfconf-query -c xsettings -p /Gtk/CursorThemeSize -s "${CURSOR_SIZE}" 2>/dev/null || true
 xfconf-query -c xsettings -p /Gtk/FontName -s "WenQuanYi Micro Hei ${FONT_SIZE}" 2>/dev/null || true
 xfconf-query -c xfce4-panel -p /panels/panel-0/size -s "${PANEL_SIZE}" 2>/dev/null || true
+
+# Plank Dock 图标尺寸（写入 dconf；Plank 优先读 dconf 再回退 settings 文件）
+if command -v dconf &>/dev/null; then
+    dconf write /net/launchpad/plank/docks/dock1/icon-size "${DOCK_ICON}" 2>/dev/null || true
+fi
+# 同步更新 settings 文件，确保下次启动一致
+PLANK_SETTINGS="${HOME}/.config/plank/dock1/settings"
+if [[ -f "${PLANK_SETTINGS}" ]]; then
+    sed -i "s/^IconSize=.*/IconSize=${DOCK_ICON}/" "${PLANK_SETTINGS}" 2>/dev/null || true
+fi
 
 # Whisfer Menu 高度安全约束（不能超出屏幕 75%）
 MENU_HEIGHT=$((HEIGHT * 72 / 100))
@@ -772,7 +779,7 @@ ONIONGLASSCSS
 [Desktop Entry]
 Type=X-GNOME-Metatheme
 Name=Onion Glass
-Comment=Onion OS 26.0.6 Liquid Glass Theme
+Comment=Onion OS 26.1.0 Liquid Glass Theme
 Encoding=UTF-8
 
 [X-GNOME-Metatheme]
@@ -936,8 +943,12 @@ WALLPAPERSVG2
             > /usr/share/backgrounds/onion-os/dark.png
     fi
 
-    # 设置默认壁纸
-    runuser -u "${ONION_USER}" -- xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitorscreen/workspace0/last-image -s /usr/share/backgrounds/onion-os/default.svg 2>/dev/null || true
+    # 设置默认壁纸（PNG，xfdesktop 不渲染 SVG backdrop）
+    # 实际“逐显示器”应用交给 onion-apply-appearance 登录脚本，
+    # 因为真实连接器名（如 monitorVGA-1/HDMI-1）在构建期未知。
+    runuser -u "${ONION_USER}" -- xfconf-query -c xfce4-desktop \
+        -p /backdrop/screen0/monitorscreen/workspace0/last-image \
+        -n -t string -s /usr/share/backgrounds/onion-os/default.png 2>/dev/null || true
 
     # 同步壁纸到 Plymouth 启动动画目录
     mkdir -p /usr/share/plymouth/themes/onion-os
@@ -958,7 +969,10 @@ WALLPAPERSVG2
     plymouth-set-default-theme onion-os 2>/dev/null || true
 }
 
-# ======================== Xfce 极简面板 ========================
+# ======================== Xfce 顶部菜单栏 (macOS 风格) ========================
+# 设计：顶部一条细面板充当 macOS 菜单栏（左 Onion 菜单 + 右托盘/时钟），
+#       底部由 Plank 提供可放大的真·Dock（见 configure_plank_dock）。
+#       Xfce 面板本身无法做 dock 悬停放大动画，因此 Dock 交给 Plank。
 
 configure_xfce_panel() {
     local xfconf_dir="/home/${ONION_USER}/.config/xfce4/xfconf/xfce-perchannel-xml"
@@ -966,50 +980,50 @@ configure_xfce_panel() {
 
     local old_panel_dir="/home/${ONION_USER}/.config/xfce4/panel"
     rm -rf "${old_panel_dir}"
+    mkdir -p "${old_panel_dir}"
 
-    # macOS 风格底部 Dock 面板
-    # 插件布局: WhiskerMenu(左) | 分隔符 | 应用启动器组(中) | 分隔符 | 系统托盘+时钟(右)
     cat > "${xfconf_dir}/xfce4-panel.xml" << 'PANELXML'
 <?xml version="1.0" encoding="UTF-8"?>
 <channel name="xfce4-panel" version="1.0">
-  <property name="panels" type="uint" value="1">
+  <property name="configver" type="int" value="2"/>
+  <property name="panels" type="array">
+    <value type="int" value="0"/>
     <property name="panel-0" type="empty">
       <property name="position" type="string" value="p=6;x=0;y=0"/>
       <property name="position-locked" type="bool" value="true"/>
-      <property name="length" type="uint" value="90"/>
-      <property name="length-adjust" type="bool" value="true"/>
-      <property name="size" type="uint" value="42"/>
-      <property name="icon-size" type="uint" value="32"/>
-      <property name="mode" type="uint" value="0"/>
       <property name="autohide-behavior" type="uint" value="0"/>
+      <property name="length" type="uint" value="100"/>
+      <property name="length-adjust" type="bool" value="true"/>
+      <property name="size" type="uint" value="30"/>
+      <property name="icon-size" type="uint" value="18"/>
+      <property name="nrows" type="uint" value="1"/>
+      <property name="mode" type="uint" value="0"/>
       <property name="background-style" type="uint" value="2"/>
       <property name="background-rgba" type="array">
-        <property name="0" type="double" value="0.101961"/>
-        <property name="1" type="double" value="0.039216"/>
-        <property name="2" type="double" value="0.180392"/>
-        <property name="3" type="double" value="0.750000"/>
+        <value type="double" value="0.101961"/>
+        <value type="double" value="0.039216"/>
+        <value type="double" value="0.180392"/>
+        <value type="double" value="0.680000"/>
       </property>
-      <property name="enter-opacity" type="uint" value="92"/>
-      <property name="leave-opacity" type="uint" value="75"/>
+      <property name="enter-opacity" type="uint" value="100"/>
+      <property name="leave-opacity" type="uint" value="88"/>
       <property name="disable-struts" type="bool" value="false"/>
       <property name="plugin-ids" type="array">
         <value type="int" value="1"/>
         <value type="int" value="2"/>
         <value type="int" value="3"/>
         <value type="int" value="4"/>
-        <value type="int" value="5"/>
         <value type="int" value="6"/>
-        <value type="int" value="7"/>
       </property>
     </property>
   </property>
   <property name="plugins" type="empty">
-    <!-- plugin-1: Whisker Menu (Onion 品牌菜单) -->
+    <!-- plugin-1: Whisker Menu (Onion 品牌开始菜单) -->
     <property name="plugin-1" type="string" value="whiskermenu">
       <property name="button-icon" type="string" value="onion-os-menu"/>
       <property name="button-title" type="string" value="Onion OS"/>
       <property name="show-button-title" type="bool" value="true"/>
-      <property name="menu-width" type="uint" value="420"/>
+      <property name="menu-width" type="uint" value="440"/>
       <property name="menu-height" type="uint" value="520"/>
       <property name="menu-opacity" type="uint" value="92"/>
       <property name="position-categories-alternate" type="bool" value="false"/>
@@ -1019,53 +1033,30 @@ configure_xfce_panel() {
       <property name="launcher-show-description" type="bool" value="true"/>
     </property>
 
-    <!-- plugin-2: 分隔符 -->
+    <!-- plugin-2: 弹性分隔符（把右侧内容推到最右） -->
     <property name="plugin-2" type="string" value="separator">
       <property name="style" type="uint" value="0"/>
-      <property name="expand" type="bool" value="false"/>
-    </property>
-
-    <!-- plugin-3: Dock 应用启动器 (Firefox) -->
-    <property name="plugin-3" type="string" value="launcher">
-      <property name="items" type="array">
-        <value type="string" value="firefox-esr.desktop"/>
-      </property>
-      <property name="move-first" type="bool" value="true"/>
-    </property>
-
-    <!-- plugin-4: Dock 应用启动器 (文件管理器) -->
-    <property name="plugin-4" type="string" value="launcher">
-      <property name="items" type="array">
-        <value type="string" value="org.xfce.thunar.desktop"/>
-        <value type="string" value="xfce4-terminal.desktop"/>
-        <value type="string" value="org.gnome.Software.desktop"/>
-      </property>
-      <property name="move-first" type="bool" value="true"/>
-    </property>
-
-    <!-- plugin-5: 弹性分隔符（居中 Dock 图标） -->
-    <property name="plugin-5" type="string" value="separator">
-      <property name="style" type="uint" value="1"/>
       <property name="expand" type="bool" value="true"/>
     </property>
 
-    <!-- plugin-6: 系统托盘 -->
-    <property name="plugin-6" type="string" value="systray">
-      <property name="known-items" type="array">
-        <value type="string" value="networkmanager"/>
-        <value type="string" value="power-manager"/>
-        <value type="string" value="pulseaudio"/>
-        <value type="string" value="notification"/>
-      </property>
+    <!-- plugin-3: 电源管理插件 (电池/亮度) -->
+    <property name="plugin-3" type="string" value="power-manager-plugin"/>
+
+    <!-- plugin-4: 状态托盘 (网络/音量/通知; Xfce 4.18 systray 已内置 SNI 支持) -->
+    <property name="plugin-4" type="string" value="systray">
       <property name="square-icons" type="bool" value="true"/>
-      <property name="icon-size" type="uint" value="22"/>
+      <property name="icon-size" type="uint" value="16"/>
+      <property name="known-legacy-items" type="array">
+        <value type="string" value="networkmanager applet"/>
+        <value type="string" value="pulseaudio plugin"/>
+      </property>
     </property>
 
-    <!-- plugin-7: 时钟 -->
-    <property name="plugin-7" type="string" value="clock">
-      <property name="digital-layout" type="uint" value="2"/>
+    <!-- plugin-6: 时钟 -->
+    <property name="plugin-6" type="string" value="clock">
+      <property name="digital-layout" type="uint" value="3"/>
       <property name="digital-time-format" type="string" value="%H:%M"/>
-      <property name="digital-date-format" type="string" value="%m/%d"/>
+      <property name="digital-date-format" type="string" value="%m月%d日"/>
       <property name="tooltip-format" type="string" value="%Y年%m月%d日 %A"/>
       <property name="mode" type="uint" value="2"/>
     </property>
@@ -1073,7 +1064,123 @@ configure_xfce_panel() {
 </channel>
 PANELXML
 
-    chown "${ONION_USER}:${ONION_USER}" "${xfconf_dir}/xfce4-panel.xml"
+    chown -R "${ONION_USER}:${ONION_USER}" "/home/${ONION_USER}/.config/xfce4"
+}
+
+# ======================== Plank macOS 风格 Dock ========================
+
+configure_plank_dock() {
+    local plank_dir="/home/${ONION_USER}/.config/plank/dock1"
+    mkdir -p "${plank_dir}/launchers"
+
+    # Dock 行为与外观：底部居中、悬停放大、半透明玻璃
+    cat > "${plank_dir}/settings" << 'PLANKSETTINGS'
+[PlankDockPreferences]
+#当前 Dock 上的启动器（顺序即显示顺序）
+DockItems=firefox-esr.dockitem;;thunar.dockitem;;gnome-software.dockitem;;wechat.dockitem;;garlic-claw.dockitem;;onion-update.dockitem;;xfce4-settings-manager.dockitem
+#停靠位置: 0=左 1=右 2=上 3=下
+Position=3
+#对齐: 3=居中
+Alignment=3
+#图标大小（onion-scale 会按分辨率覆盖）
+IconSize=48
+#悬停放大开关
+ZoomEnabled=true
+#放大倍率 (1.0-2.0)；1.5 接近 macOS 手感
+ZoomPercent=150
+#隐藏模式: 0=不隐藏 1=智能隐藏 2=自动隐藏 3=躲避窗口 4=窗口铺满时隐藏
+HideMode=4
+#自动隐藏延迟
+UnhideDelay=0
+HideDelay=0
+#主题（见下方 Onion.theme）
+Theme=Onion
+#显示在所有工作区
+Monitor=
+#锁定图标，防止误拖拽
+LockItems=false
+#压力解锁
+PressureReveal=false
+#显示正在运行程序的指示点
+ShowDockItem=true
+ItemsAlignment=3
+#淡入淡出
+FadeOpacity=1.0
+PLANKSETTINGS
+
+    # Dock 启动器（.dockitem 指向系统 .desktop）
+    _plank_launcher() {
+        local name="$1" target="$2"
+        cat > "${plank_dir}/launchers/${name}.dockitem" << DOCKITEM
+[PlankDockItemPreferences]
+Launcher=file:///usr/share/applications/${target}
+DOCKITEM
+    }
+
+    _plank_launcher "firefox-esr" "firefox-esr.desktop"
+    _plank_launcher "thunar" "thunar.desktop"
+    _plank_launcher "gnome-software" "gnome-software.desktop"
+    _plank_launcher "wechat" "deepin.com.wechat.desktop"
+    _plank_launcher "garlic-claw" "garlic-claw.desktop"
+    _plank_launcher "onion-update" "onion-update.desktop"
+    _plank_launcher "xfce4-settings-manager" "xfce-settings-manager.desktop"
+
+    # Onion 玻璃风 Plank 主题
+    local theme_dir="/usr/share/plank/themes/Onion"
+    mkdir -p "${theme_dir}"
+    cat > "${theme_dir}/dock.theme" << 'PLANKTHEME'
+[PlankTheme]
+TopRoundness=12
+BottomRoundness=0
+LineWidth=1
+OuterStrokeColor=155;89;182;90
+FillStartColor=26;10;46;200
+FillEndColor=26;10;46;230
+InnerStrokeColor=216;191;226;40
+
+[PlankDockTheme]
+HorizPadding=8
+TopPadding=-6
+BottomPadding=4
+ItemPadding=4
+IndicatorSize=5
+IconShadowSize=2
+UrgentBounceHeight=1.6666666666666667
+LaunchBounceHeight=0.625
+FadeOpacity=1.0
+ClickTime=300
+UrgentBounceTime=600
+LaunchBounceTime=600
+ActiveTime=300
+SlideTime=300
+FadeTime=250
+HideTime=250
+GlowSize=30
+GlowTime=10000
+GlowPulseTime=2000
+UrgentHueShift=150
+ItemMoveTime=450
+CascadeHide=true
+PLANKTHEME
+
+    # Plank 自启动（picom 之后启动，确保 dock 透明模糊正常）
+    local autostart_dir="/home/${ONION_USER}/.config/autostart"
+    mkdir -p "${autostart_dir}"
+    cat > "${autostart_dir}/plank.desktop" << 'PLANKAUTO'
+[Desktop Entry]
+Type=Application
+Name=Plank Dock
+Comment=Onion OS macOS 风格程序坞
+Exec=sh -c "sleep 2 && plank"
+Icon=plank
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=2
+PLANKAUTO
+
+    chown -R "${ONION_USER}:${ONION_USER}" "/home/${ONION_USER}/.config/plank" \
+        "${autostart_dir}/plank.desktop"
 }
 
 # ======================== Picom 用户级配置 ========================
@@ -1081,7 +1188,12 @@ PANELXML
 configure_picom() {
     mkdir -p /home/${ONION_USER}/.config/picom
     cat > /home/${ONION_USER}/.config/picom/picom.conf << 'PICOMCFG'
-# Onion OS 26.0.6 Picom 配置 - 液态玻璃效果 + 丝滑动画
+# Onion OS 26.1.0 Picom 配置 - 液态玻璃效果 (mainline picom 10.x 兼容)
+# 说明：Debian 12 仓库的 picom 为 10.2 主线版，不支持 jonaburg/FT-Labs
+#       分支的 animations 块；强行写入会导致配置解析失败、合成器拒绝启动，
+#       这正是历史版本“美化没生效”的元凶之一。这里只用主线支持的特性：
+#       dual_kawase 模糊 + 圆角 + 柔光阴影 + 渐入渐出，配合 Plank 的 dock
+#       缩放动画，实现 macOS 风格的丝滑观感。
 backend = "glx";
 vsync = true;
 unredir-if-possible = true;
@@ -1090,47 +1202,20 @@ glx-no-rebind-pixmap = true;
 use-damage = true;
 xrender-sync-fence = true;
 
-# ---- 液态玻璃模糊 ----
-blur:
-{
-  method = "kernel";
-  strength = 12;
-  kernel = "5,5,5,5,5,5,5,5,5,5,5,5,5,5,5";
-  background = true;
-  background-frame = true;
-  background-fixed = true;
-}
+# ---- 液态玻璃模糊 (dual_kawase 为主线 picom 支持) ----
+blur-method = "dual_kawase";
+blur-strength = 7;
+blur-background = true;
+blur-background-frame = true;
+blur-background-fixed = true;
 blur-background-exclude = [
   "class_g = 'firefox'",
   "class_g = 'Chromium'",
   "class_g = 'Code'",
   "window_type = 'dock'",
   "window_type = 'desktop'",
+  "_GTK_FRAME_EXTENTS@:c",
 ];
-
-# ---- 窗口动画 (spring/fade) ----
-animations:
-{
-  enabled = true;
-
-  # 窗口打开: 弹跳缩放
-  animation-for-open-window = "spring";
-  animation-stiffness = 300.0;
-  animation-dampening = 25.0;
-  animation-window-mass = 0.8;
-  animation-for-open-window = 250;
-
-  # 窗口关闭: 淡出缩小
-  animation-for-closing-window = "fade";
-  animation-for-closing-window = 180;
-
-  # 透明度过渡
-  animation-for-transient-window = 200;
-}
-animation-stiffness-in-tag = 300.0;
-animation-window-mass-in-tag = 0.8;
-animation-dampening-in-tag = 25.0;
-animation-clamping-in-tag = true;
 
 # ---- 阴影 ----
 shadow = true;
@@ -1422,7 +1507,7 @@ CALAMARES
 setup_welcome_wizard() {
     cat > /usr/local/bin/onion-welcome << 'WELCOMEPY'
 #!/usr/bin/env python3
-# Onion OS 26.0.6 首次启动欢迎引导
+# Onion OS 26.1.0 首次启动欢迎引导
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -1672,49 +1757,8 @@ configure_simplified_menus() {
 UCACFG
     chown "${ONION_USER}:${ONION_USER}" "/home/${ONION_USER}/.config/Thunar/uca.xml"
 
-    mkdir -p "/home/${ONION_USER}/.config/xfce4/xfconf/xfce-perchannel-xml"
-    cat > "/home/${ONION_USER}/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml" << DESKTOPCFG
-<?xml version="1.0" encoding="UTF-8"?>
-<channel name="xfce4-desktop" version="1.0">
-  <property name="desktop-icons" type="empty">
-    <property name="style" type="int" value="0"/>
-    <property name="file-icons" type="empty">
-      <property name="show-home" type="bool" value="false"/>
-      <property name="show-filesystem" type="bool" value="false"/>
-      <property name="show-trash" type="bool" value="false"/>
-      <property name="show-removable" type="bool" value="false"/>
-    </property>
-  </property>
-  <property name="desktop-menu" type="empty">
-    <property name="show" type="bool" value="true"/>
-    <property name="show-icons" type="bool" value="true"/>
-    <property name="show-windowlist" type="bool" value="false"/>
-    <property name="show-add-remove-workspaces" type="bool" value="false"/>
-    <property name="show-applications" type="bool" value="false"/>
-  </property>
-</channel>
-DESKTOPCFG
-    chown "${ONION_USER}:${ONION_USER}" "/home/${ONION_USER}/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml"
-
+    # 清空桌面快捷方式（清爽桌面，所有入口走 Dock / 菜单）
     rm -f "/home/${ONION_USER}/Desktop/"*.desktop 2>/dev/null || true
-
-    cat > "/home/${ONION_USER}/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml" << XFWM4CFG
-<?xml version="1.0" encoding="UTF-8"?>
-<channel name="xfwm4" version="1.0">
-  <property name="general" type="empty">
-    <property name="theme" type="string" value="Default-xhdpi"/>
-    <property name="title_font" type="string" value="WenQuanYi Micro Hei 11"/>
-    <property name="title_alignment" type="string" value="center"/>
-    <property name="button_layout" type="string" value="O|HMC"/>
-    <property name="workspace_count" type="int" value="2"/>
-    <property name="wrap_windows" type="bool" value="true"/>
-    <property name="wrap_workspaces" type="bool" value="false"/>
-    <property name="cycle_minimum" type="bool" value="true"/>
-    <property name="mousewheel_rollup" type="bool" value="false"/>
-  </property>
-</channel>
-XFWM4CFG
-    chown "${ONION_USER}:${ONION_USER}" "/home/${ONION_USER}/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml"
 }
 
 # ======================== Live 安装器脚本 ========================
@@ -1863,7 +1907,7 @@ XFWM4CFG
         <property name="workspace0" type="empty">
           <property name="color-style" type="int" value="0"/>
           <property name="image-style" type="int" value="5"/>
-          <property name="last-image" type="string" value="/usr/share/backgrounds/onion-os/default.svg"/>
+          <property name="last-image" type="string" value="/usr/share/backgrounds/onion-os/default.png"/>
         </property>
       </property>
     </property>
@@ -1921,7 +1965,7 @@ DESKTOPCFG
 </channel>
 XSETTINGSCFG
 
-    # Whisker Menu 配置（26.0.5 紫色主题版）
+    # Whisker Menu 配置（26.1.0 紫色玻璃主题版）
     mkdir -p "/home/${ONION_USER}/.config/xfce4/panel"
     cat > "/home/${ONION_USER}/.config/xfce4/panel/whiskermenu-1.rc" << 'WHISKERRC'
 button-title=Onion OS
@@ -1957,25 +2001,108 @@ WHISKERRC
     chown -R "${ONION_USER}:${ONION_USER}" "/home/${ONION_USER}/.config/xfce4"
 }
 
+# ======================== 登录期外观强制应用 ========================
+# 为什么需要它：构建期写入的 xfconf XML 在真实硬件上未必被 xfdesktop 接受
+# （真实显示器连接器名未知），且 Plank/picom 需要在会话内启动。此脚本在每次
+# 登录时自愈式地强制套用壁纸、主题与 Dock，是“美化确实生效”的最后保障。
+
+configure_appearance_enforcer() {
+    cat > /usr/local/bin/onion-apply-appearance << 'APPLYAPPEARANCE'
+#!/usr/bin/env bash
+# Onion OS 外观强制应用 - 每次登录运行，确保美化生效
+WALL_PNG="/usr/share/backgrounds/onion-os/default.png"
+WALL_1366="/usr/share/backgrounds/onion-os/default-1366x768.png"
+
+# 等待 xfdesktop / xfconfd 就绪
+for i in $(seq 1 15); do
+    if xfconf-query -c xfce4-desktop -l &>/dev/null; then break; fi
+    sleep 1
+done
+
+# 低分辨率优先使用小尺寸壁纸，减小内存占用
+WALL="${WALL_PNG}"
+RES=$(xrandr --current 2>/dev/null | grep '\*' | head -1 | awk '{print $1}')
+W=$(echo "${RES}" | cut -d'x' -f1)
+if [[ -n "${W}" && "${W}" -le 1366 && -f "${WALL_1366}" ]]; then
+    WALL="${WALL_1366}"
+fi
+
+# 对每一个真实 backdrop 属性（逐显示器/逐工作区）套用壁纸。
+# 这样无论连接器叫 monitorVGA-1 / monitorHDMI-1 / monitorscreen 都能命中。
+mapfile -t PROPS < <(xfconf-query -c xfce4-desktop -l 2>/dev/null | grep '/last-image$')
+if [[ ${#PROPS[@]} -eq 0 ]]; then
+    # 没有现成属性时，手动建一个通用的
+    xfconf-query -c xfce4-desktop \
+        -p /backdrop/screen0/monitorscreen/workspace0/last-image \
+        -n -t string -s "${WALL}" 2>/dev/null || true
+    xfconf-query -c xfce4-desktop \
+        -p /backdrop/screen0/monitorscreen/workspace0/image-style \
+        -n -t int -s 5 2>/dev/null || true
+else
+    for p in "${PROPS[@]}"; do
+        xfconf-query -c xfce4-desktop -p "${p}" -s "${WALL}" 2>/dev/null || true
+        # 同步设置缩放方式为 5 (zoomed/拉伸填充)
+        style_prop="${p%/last-image}/image-style"
+        xfconf-query -c xfce4-desktop -p "${style_prop}" -n -t int -s 5 2>/dev/null || true
+    done
+fi
+
+# 强制主题/图标主题（防止首次会话回退到默认）
+xfconf-query -c xsettings -p /Net/ThemeName -s "Onion-Glass" 2>/dev/null || true
+xfconf-query -c xsettings -p /Net/IconThemeName -s "Papirus" 2>/dev/null || true
+xfconf-query -c xfwm4 -p /general/theme -s "Arc-Darker" 2>/dev/null || true
+
+# 刷新桌面
+xfdesktop --reload 2>/dev/null || true
+
+# 确保 Plank Dock 在运行（picom 启动后）
+if command -v plank &>/dev/null && ! pgrep -x plank &>/dev/null; then
+    (sleep 1 && nohup plank >/dev/null 2>&1 &) 2>/dev/null || true
+fi
+
+exit 0
+APPLYAPPEARANCE
+    chmod +x /usr/local/bin/onion-apply-appearance
+
+    # 登录自启动（在 picom/plank 之后，phase=Applications）
+    local autostart_dir="/home/${ONION_USER}/.config/autostart"
+    mkdir -p "${autostart_dir}"
+    cat > "${autostart_dir}/onion-apply-appearance.desktop" << 'APPLYAUTO'
+[Desktop Entry]
+Type=Application
+Name=Onion Appearance
+Comment=确保 Onion OS 外观正确应用
+Exec=/usr/local/bin/onion-apply-appearance
+Hidden=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Phase=Applications
+X-GNOME-Autostart-Delay=3
+APPLYAUTO
+    chown -R "${ONION_USER}:${ONION_USER}" "${autostart_dir}/onion-apply-appearance.desktop"
+}
+
 # ======================== 主流程 ========================
 
 main() {
-    echo "=====> [03_desktop] 开始 Onion OS 26.0.6 macOS Dock 桌面定制 <====="
+    echo "=====> [03_desktop] 开始 Onion OS 26.1.0 macOS Dock 桌面定制 <====="
 
     generate_onion_icons
     configure_hidpi_autoscale
     install_themes
     setup_wallpaper
-    configure_xfce_panel
+    configure_xfce_settings      # 先写桌面/xfwm/xsettings（含壁纸 backdrop）
+    configure_xfce_panel         # 顶部 macOS 菜单栏
+    configure_plank_dock         # 底部可放大 Dock
     configure_picom
     configure_notification_filter
+    configure_simplified_menus   # 只动 Thunar 右键菜单，不再覆盖桌面/xfwm 配置
     configure_autostart
     deploy_live_installer
-    configure_xfce_settings
     setup_welcome_wizard
-    configure_simplified_menus
+    configure_appearance_enforcer  # 最后部署登录期自愈强制应用
 
-    echo "=====> [03_desktop] Onion OS 26.0.6 macOS Dock 桌面定制完成 <====="
+    echo "=====> [03_desktop] Onion OS 26.1.0 macOS Dock 桌面定制完成 <====="
 }
 
 main

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Onion OS 26.0.5 Home Edition - 主构建脚本
+# Onion OS 26.1.0 Home Edition - 主构建脚本
 # ============================================================================
 # 设计意图：
 #   在 Debian 12 (Bookworm) 宿主系统上，通过 debootstrap 构建一个完整的
@@ -27,7 +27,7 @@ set -euo pipefail
 
 # ======================== 项目常量 ========================
 readonly ONION_OS_NAME="Onion OS"
-readonly ONION_OS_VERSION="26.0.6"
+readonly ONION_OS_VERSION="26.1.0"
 readonly ONION_OS_EDITION="Home"
 readonly ONION_OS_CODENAME="onion"
 readonly DEBIAN_MIRROR="https://mirrors.tuna.tsinghua.edu.cn/debian/"
@@ -207,6 +207,7 @@ run_modules() {
         "04_garlic_claw.sh"
         "05_security_tools.sh"
         "06_ota_update.sh"
+        "07_finalize.sh"
     )
     for mod in "${modules[@]}"; do
         local mod_path="/tmp/onion-build/modules/${mod}"

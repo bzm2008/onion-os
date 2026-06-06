@@ -282,7 +282,7 @@ sleep 5
 # 欢迎界面
 zenity --info \\
     --title="欢迎使用 Onion OS" \\
-    --text="欢迎使用 Onion OS 26.0.6 Home Edition！\\n\\n接下来将引导您配置 Garlic Claw AI 助手。\\n如果您暂时不需要 AI 助手，可以跳过此步骤。" \\
+    --text="欢迎使用 Onion OS 26.1.0 Home Edition！\\n\\n接下来将引导您配置 Garlic Claw AI 助手。\\n如果您暂时不需要 AI 助手，可以跳过此步骤。" \\
     --width=450 \\
     --ok-label="开始配置" \\
     --extra-button="跳过" \\

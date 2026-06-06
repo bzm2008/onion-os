@@ -12,6 +12,10 @@ ventoy-*.zip
 # Wget logs
 wget-log*
 
+# Local build logs and one-off helper scripts
+build-logs/
+repackage_*.sh
+
 # OS files
 .DS_Store
 Thumbs.db

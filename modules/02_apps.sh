@@ -60,6 +60,7 @@ install_xfce_desktop() {
 
     apt install -y --no-install-recommends \
         picom \
+        plank \
         librsvg2-bin \
         librsvg2-common \
         imagemagick
@@ -391,6 +392,9 @@ StartupNotify=true
 WECHATDESKTOP
     chown "${ONION_USER}:${ONION_USER}" "/home/${ONION_USER}/Desktop/wechat.desktop"
     chmod +x "/home/${ONION_USER}/Desktop/wechat.desktop"
+
+    # 同步到系统应用目录，供 Plank Dock / Whisker 菜单解析
+    cp /home/${ONION_USER}/Desktop/wechat.desktop /usr/share/applications/deepin.com.wechat.desktop
 }
 
 # ======================== Fcitx5 中文输入法 ========================
