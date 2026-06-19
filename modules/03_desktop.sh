@@ -536,6 +536,42 @@ APPLIBICON
 
     # Update gtk icon cache
     gtk-update-icon-cache "${icon_base}" 2>/dev/null || true
+
+    # 安装 assets/icons/ 中的 AI 生成 PNG 图标（26.2.5，覆盖 SVG 版本）
+    local assets="/tmp/onion-build/assets/icons"
+    if [[ -d "${assets}" ]]; then
+        for size in 48 64 128 256; do
+            mkdir -p "${icon_base}/${size}x${size}/apps"
+        done
+        local -A MAP=(
+            [security]="onion-security onion-master"
+            [update]="onion-update-icon"
+            [settings]="onion-settings"
+            [terminal]="onion-terminal utilities-terminal xfce4-terminal"
+            [files]="thunar system-file-manager"
+            [garlic-claw]="garlic-claw"
+            [store]="onion-app-store onion-app-library"
+            [wechat-mgr]="onion-wechat-manager"
+            [browser]="firefox-esr org.mozilla.firefox"
+            [control]="onion-control-center onion-display"
+        )
+        for src_name in "${!MAP[@]}"; do
+            local src_file="${assets}/${src_name}.png"
+            [[ -f "${src_file}" ]] || continue
+            for dest_name in ${MAP[$src_name]}; do
+                for size in 48 64 128 256; do
+                    local dest="${icon_base}/${size}x${size}/apps/${dest_name}.png"
+                    if command -v convert &>/dev/null; then
+                        convert -resize "${size}x${size}" "${src_file}" "${dest}" 2>/dev/null || cp "${src_file}" "${dest}"
+                    else
+                        cp "${src_file}" "${dest}"
+                    fi
+                done
+            done
+        done
+        gtk-update-icon-cache "${icon_base}" 2>/dev/null || true
+        echo "AI-generated PNG icons installed."
+    fi
 }
 
 # ======================== 主题与图标 ========================
@@ -547,39 +583,43 @@ install_themes() {
         papirus-icon-theme \
         numix-icon-theme-circle
 
-    # 生成 Onion 品牌化 GTK3 CSS 覆盖（紫色强调色）
+    # 生成 Onion 品牌化 GTK3 CSS 覆盖（深绿强调色，26.2.5 新配色）
     mkdir -p /usr/share/themes/Arc-Darker/gtk-3.0
-    cat > /usr/share/themes/Arc-Darker/gtk-3.0/gtk-onion.css << ONIONGTKCSS
-@define-color theme_selected_bg_color #8E44AD;
+    cat > /usr/share/themes/Arc-Darker/gtk-3.0/gtk-onion.css << 'ONIONGTKCSS'
+@define-color theme_selected_bg_color #31C476;
 @define-color theme_selected_fg_color #ffffff;
-@define-color theme_selected_bg_color_rgba rgba(142,68,173,0.85);
+@define-color theme_selected_bg_color_rgba rgba(49,196,118,0.85);
 
 headerbar entry selection,
 headerbar .selection,
-toolbar .selection,
-toolbar selection,
 entry selection,
 label selection,
 .view:selected,
-.nautilus-canvas-item:selected,
 .tile:selected {
-    background-color: #8E44AD;
+    background-color: #31C476;
     color: #ffffff;
 }
 
 button.suggested-action {
-    background-image: linear-gradient(to bottom, #9B59B6, #7D3C98);
-    border-color: #6C3483;
+    background-image: linear-gradient(to bottom, #31C476, #147D74);
+    border-color: #00453E;
     color: #ffffff;
 }
 button.suggested-action:hover {
-    background-image: linear-gradient(to bottom, #A569BD, #8E44AD);
+    background-image: linear-gradient(to bottom, #3DD486, #1A9088);
+}
+
+/* macOS 风格圆角窗口边框 */
+window decoration {
+    border-radius: 10px 10px 0 0;
+}
+headerbar {
+    border-radius: 10px 10px 0 0;
 }
 ONIONGTKCSS
 
     mkdir -p "/home/${ONION_USER}/.config/gtk-3.0"
     cat > "/home/${ONION_USER}/.config/gtk-3.0/settings.ini" << 'GTKSETTINGS'
-
 [Settings]
 gtk-theme-name=Onion-Glass
 gtk-icon-theme-name=Papirus
@@ -592,6 +632,8 @@ gtk-button-images=0
 gtk-menu-images=0
 gtk-enable-event-sounds=0
 gtk-enable-input-feedback-sounds=0
+gtk-application-prefer-dark-theme=0
+gtk-decoration-layout=close,minimize,maximize:
 GTKSETTINGS
 
     cat > "/home/${ONION_USER}/.gtkrc-2.0" << 'GTK2SETTINGS'
